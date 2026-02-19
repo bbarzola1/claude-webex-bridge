@@ -242,8 +242,8 @@ def _build_sessions_card(sessions: list[SessionInfo]) -> dict:
 
 async def handle_sessions(api: WebexAPI, room_id: str) -> None:
     state = get_state(room_id)
-    # Fetch extra sessions to account for filtered ones
-    all_sessions = list_recent_sessions(limit=20)
+    # Fetch extra sessions to account for filtered ones (run in thread to avoid blocking event loop)
+    all_sessions = await asyncio.to_thread(list_recent_sessions, 20)
     if not all_sessions:
         await api.send_message(room_id, "No recent sessions found.")
         return
@@ -299,8 +299,8 @@ async def handle_connect(api: WebexAPI, room_id: str, arg: str) -> None:
 
     selected = state.pending_sessions[index - 1]
 
-    # Re-verify the session still exists on disk
-    session = get_session_by_id(selected.session_id)
+    # Re-verify the session still exists on disk (run in thread to avoid blocking event loop)
+    session = await asyncio.to_thread(get_session_by_id, selected.session_id)
     if session is None:
         await api.send_message(room_id, "Session not found. It may have been deleted. Run `/sessions` again.")
         return

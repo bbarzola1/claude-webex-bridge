@@ -34,6 +34,7 @@ async def send_message(
     ]
     if skip_permissions:
         cmd.append("--dangerously-skip-permissions")
+    cmd.append("--")
     cmd.append(message)
 
     logger.info("Running: %s (cwd=%s)", " ".join(cmd[:6]) + " ...", cwd)

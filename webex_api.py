@@ -47,14 +47,30 @@ class WebexAPI:
         json: dict | None = None,
         params: dict | None = None,
     ) -> dict:
-        """Make an API request with rate-limit retry handling."""
-        assert self._client is not None, "Call start() before making requests"
+        """Make an API request with rate-limit and transient-error retry handling."""
+        if self._client is None:
+            raise RuntimeError("Call start() before making requests")
 
         for attempt in range(1, MAX_RETRIES + 1):
-            response = await self._client.request(method, path, json=json, params=params)
+            try:
+                response = await self._client.request(method, path, json=json, params=params)
+            except httpx.RequestError as exc:
+                # Transient network errors (connect, read, DNS, etc.)
+                if attempt < MAX_RETRIES:
+                    wait = min(2 ** attempt, 30)
+                    logger.warning(
+                        "Request error (attempt %d/%d): %s — retrying in %ds",
+                        attempt, MAX_RETRIES, exc, wait,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
 
             if response.status_code == 429:
-                retry_after = int(response.headers.get("Retry-After", "5"))
+                try:
+                    retry_after = min(int(response.headers.get("Retry-After", "5")), 60)
+                except ValueError:
+                    retry_after = 5
                 logger.warning(
                     "Rate limited (attempt %d/%d), retrying in %ds",
                     attempt, MAX_RETRIES, retry_after,
@@ -66,13 +82,23 @@ class WebexAPI:
                 logger.error("Authentication failed (401). Check WEBEX_BOT_TOKEN.")
                 raise SystemExit("Fatal: Webex API returned 401 Unauthorized.")
 
+            # Retry on transient server errors (5xx)
+            if response.status_code >= 500 and attempt < MAX_RETRIES:
+                wait = min(2 ** attempt, 30)
+                logger.warning(
+                    "Server error %d (attempt %d/%d), retrying in %ds",
+                    response.status_code, attempt, MAX_RETRIES, wait,
+                )
+                await asyncio.sleep(wait)
+                continue
+
             response.raise_for_status()
             return response.json()
 
-        # Exhausted retries on 429
-        logger.error("Rate limit retries exhausted after %d attempts", MAX_RETRIES)
+        # Exhausted retries
+        logger.error("Retries exhausted after %d attempts", MAX_RETRIES)
         raise httpx.HTTPStatusError(
-            "Rate limit retries exhausted",
+            "Retries exhausted",
             request=response.request,
             response=response,
         )
