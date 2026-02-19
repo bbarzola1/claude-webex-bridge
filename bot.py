@@ -144,17 +144,56 @@ def _short_path(cwd: str) -> str:
 # ---------------------------------------------------------------------------
 
 async def handle_start(api: WebexAPI, room_id: str) -> None:
-    await api.send_message(
-        room_id,
-        "**Claude Code Bridge (Webex)**\n\n"
-        "Commands:\n"
-        "- `/sessions` - List recent sessions\n"
-        "- `/connect N` - Connect to session N from the list\n"
-        "- `/disconnect` - Disconnect from session\n"
-        "- `/status` - Show connection status\n"
-        "- `/safe` - Toggle permission mode\n\n"
-        "Connect to a session, then send messages to interact with Claude Code.",
+    commands = [
+        ("/sessions", "List recent sessions"),
+        ("/resume N", "Resume session N from the list"),
+        ("/resume", "Quick-resume latest session"),
+        ("/disconnect", "Disconnect from session"),
+        ("/status", "Show connection info"),
+        ("/safe", "Toggle permission mode"),
+    ]
+
+    card = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": "Claude Code Bridge",
+                "size": "Medium",
+                "weight": "Bolder",
+            },
+            {
+                "type": "FactSet",
+                "facts": [
+                    {"title": cmd, "value": desc}
+                    for cmd, desc in commands
+                ],
+            },
+            {
+                "type": "Container",
+                "separator": True,
+                "style": "accent",
+                "items": [
+                    {
+                        "type": "TextBlock",
+                        "text": "Tip: Use `/resume` to jump straight into your latest session.",
+                        "wrap": True,
+                        "weight": "Bolder",
+                    }
+                ],
+            },
+        ],
+    }
+
+    fallback = (
+        "**Claude Code Bridge**\n\n"
+        + "\n".join(f"- `{cmd}` -- {desc}" for cmd, desc in commands)
+        + "\n\nTip: Use `/resume` to jump straight into your latest session."
     )
+
+    await api.send_card_message(room_id, card, fallback)
 
 
 def _build_sessions_card(sessions: list[SessionInfo]) -> dict:
@@ -224,7 +263,7 @@ def _build_sessions_card(sessions: list[SessionInfo]) -> dict:
             "items": [
                 {
                     "type": "TextBlock",
-                    "text": "Reply with `/connect N` to connect to a session",
+                    "text": "Reply with `/resume N` to resume a session",
                     "weight": "Bolder",
                     "wrap": True,
                 }
@@ -267,7 +306,7 @@ async def handle_sessions(api: WebexAPI, room_id: str) -> None:
         ago = _relative_time(s.timestamp)
         lines.append(f"{i}. {label}")
         lines.append(f"   {path} \u00b7 {ago}\n")
-    lines.append("Use /connect N to connect to a session.")
+    lines.append("Use /resume N to resume a session.")
     fallback_text = "\n".join(lines)
 
     card = _build_sessions_card(filtered)
@@ -337,7 +376,7 @@ async def handle_connect(api: WebexAPI, room_id: str, arg: str) -> None:
     try:
         index = int(arg)
     except ValueError:
-        await api.send_message(room_id, "Invalid number. Usage: `/connect N`")
+        await api.send_message(room_id, "Invalid number. Usage: `/resume N`")
         return
 
     if not state.pending_sessions:
@@ -536,7 +575,7 @@ async def dispatch(api: WebexAPI, room_id: str, text: str) -> None:
     command = parts[0].lower()
     arg = parts[1] if len(parts) > 1 else ""
 
-    if command == "/connect":
+    if command == "/resume":
         await handle_connect(api, room_id, arg.strip())
     elif command in COMMANDS:
         await COMMANDS[command](api, room_id)
