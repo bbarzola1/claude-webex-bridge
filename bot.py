@@ -1,0 +1,372 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+from dataclasses import dataclass, field
+
+from auth import is_authorized
+from claude_cli import send_message as cli_send_message
+from config import POLL_INTERVAL_SECONDS, WEBEX_MAX_MESSAGE_BYTES
+from sessions import SessionInfo, get_session_by_id, list_recent_sessions
+from webex_api import WebexAPI
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BotState:
+    session_id: str | None = None
+    session_cwd: str | None = None
+    session_label: str = ""
+    skip_permissions: bool = True
+    pending_sessions: list[SessionInfo] = field(default_factory=list)
+    processing: bool = False
+
+
+state = BotState()
+
+
+# ---------------------------------------------------------------------------
+# Message splitting (byte-aware for Webex)
+# ---------------------------------------------------------------------------
+
+def split_message(text: str, max_bytes: int = WEBEX_MAX_MESSAGE_BYTES) -> list[str]:
+    """Split text into chunks that each fit within max_bytes when UTF-8 encoded."""
+    if len(text.encode("utf-8")) <= max_bytes:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+
+    for line in text.split("\n"):
+        candidate = current + "\n" + line if current else line
+        if len(candidate.encode("utf-8")) > max_bytes:
+            if current:
+                chunks.append(current)
+                current = ""
+            # Check if the single line itself exceeds the limit
+            if len(line.encode("utf-8")) > max_bytes:
+                # Hard-split the line without breaking multi-byte characters
+                chunks.extend(_hard_split_line(line, max_bytes))
+            else:
+                current = line
+        else:
+            current = candidate
+
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _hard_split_line(line: str, max_bytes: int) -> list[str]:
+    """Split a single long line by byte length without breaking UTF-8 characters."""
+    parts: list[str] = []
+    current = ""
+    for char in line:
+        candidate = current + char
+        if len(candidate.encode("utf-8")) > max_bytes:
+            parts.append(current)
+            current = char
+        else:
+            current = candidate
+    if current:
+        parts.append(current)
+    return parts
+
+
+# ---------------------------------------------------------------------------
+# Command handlers
+# ---------------------------------------------------------------------------
+
+async def handle_start(api: WebexAPI, room_id: str) -> None:
+    await api.send_message(
+        room_id,
+        "**Claude Code Bridge (Webex)**\n\n"
+        "Commands:\n"
+        "- `/sessions` - List recent sessions\n"
+        "- `/connect N` - Connect to session N from the list\n"
+        "- `/disconnect` - Disconnect from session\n"
+        "- `/status` - Show connection status\n"
+        "- `/safe` - Toggle permission mode\n\n"
+        "Connect to a session, then send messages to interact with Claude Code.",
+    )
+
+
+async def handle_sessions(api: WebexAPI, room_id: str) -> None:
+    recent = list_recent_sessions()
+    if not recent:
+        await api.send_message(room_id, "No recent sessions found.")
+        return
+
+    state.pending_sessions = recent
+    lines = ["**Recent sessions** (use `/connect N` to connect):\n"]
+    for i, s in enumerate(recent, 1):
+        label = s.display if s.display else s.session_id[:12]
+        lines.append(f"{i}. {label}")
+
+    await api.send_message(room_id, "\n".join(lines))
+
+
+async def handle_connect(api: WebexAPI, room_id: str, arg: str) -> None:
+    if not arg:
+        await api.send_message(room_id, "Usage: `/connect N` (run `/sessions` first)")
+        return
+
+    try:
+        index = int(arg)
+    except ValueError:
+        await api.send_message(room_id, "Invalid number. Usage: `/connect N`")
+        return
+
+    if not state.pending_sessions:
+        await api.send_message(room_id, "No session list cached. Run `/sessions` first.")
+        return
+
+    if index < 1 or index > len(state.pending_sessions):
+        await api.send_message(
+            room_id,
+            f"Out of range. Pick a number between 1 and {len(state.pending_sessions)}.",
+        )
+        return
+
+    selected = state.pending_sessions[index - 1]
+
+    # Re-verify the session still exists on disk
+    session = get_session_by_id(selected.session_id)
+    if session is None:
+        await api.send_message(room_id, "Session not found. It may have been deleted. Run `/sessions` again.")
+        return
+
+    state.session_id = session.session_id
+    state.session_cwd = session.cwd
+    state.session_label = session.display or session.session_id[:12]
+
+    mode = "skip-permissions" if state.skip_permissions else "safe"
+    await api.send_message(
+        room_id,
+        f"**Connected to:** {state.session_label}\n"
+        f"**Project:** {session.project}\n"
+        f"**Working dir:** {session.cwd}\n"
+        f"**Mode:** {mode}\n\n"
+        "Send a message to interact with this session.",
+    )
+
+
+async def handle_disconnect(api: WebexAPI, room_id: str) -> None:
+    if state.session_id is None:
+        await api.send_message(room_id, "Not connected to any session.")
+        return
+
+    label = state.session_label
+    state.session_id = None
+    state.session_cwd = None
+    state.session_label = ""
+    await api.send_message(room_id, f"Disconnected from: {label}")
+
+
+async def handle_status(api: WebexAPI, room_id: str) -> None:
+    if state.session_id is None:
+        connected = "Not connected"
+    else:
+        connected = (
+            f"**Connected to:** {state.session_label}\n"
+            f"**Session ID:** {state.session_id}\n"
+            f"**Working dir:** {state.session_cwd}"
+        )
+
+    mode = "skip-permissions" if state.skip_permissions else "safe"
+    await api.send_message(room_id, f"{connected}\n**Mode:** {mode}")
+
+
+async def handle_safe(api: WebexAPI, room_id: str) -> None:
+    state.skip_permissions = not state.skip_permissions
+
+    if state.skip_permissions:
+        await api.send_message(
+            room_id,
+            "**Mode: skip-permissions**\n"
+            "Claude will execute tools without asking for approval.",
+        )
+    else:
+        await api.send_message(
+            room_id,
+            "**Mode: safe**\n"
+            "WARNING: In --print mode, Claude cannot prompt for interactive permission "
+            "approval. Commands requiring approval may cause the CLI to hang. "
+            "Use `/safe` again to switch back if this happens.",
+        )
+
+
+async def handle_text_message(api: WebexAPI, room_id: str, text: str) -> None:
+    """Forward a plain text message to the connected Claude session."""
+    if state.session_id is None:
+        await api.send_message(room_id, "Not connected. Use `/sessions` to pick a session.")
+        return
+
+    if state.processing:
+        await api.send_message(room_id, "Still processing the previous message. Please wait.")
+        return
+
+    state.processing = True
+    try:
+        # Send "Thinking..." placeholder
+        thinking = await api.send_message(room_id, "Thinking...")
+        thinking_id = thinking.get("id")
+
+        response = await cli_send_message(
+            session_id=state.session_id,
+            message=text,
+            cwd=state.session_cwd,
+            skip_permissions=state.skip_permissions,
+        )
+
+        chunks = split_message(response)
+
+        # Edit "Thinking..." with first chunk, fallback to new message
+        if thinking_id:
+            result = await api.edit_message(thinking_id, room_id, chunks[0])
+            if result is None:
+                await api.send_message(room_id, chunks[0])
+        else:
+            await api.send_message(room_id, chunks[0])
+
+        # Send remaining chunks as new messages
+        for chunk in chunks[1:]:
+            await api.send_message(room_id, chunk)
+    finally:
+        state.processing = False
+
+
+# ---------------------------------------------------------------------------
+# Command dispatch
+# ---------------------------------------------------------------------------
+
+COMMANDS = {
+    "/start": handle_start,
+    "/help": handle_start,
+    "/sessions": handle_sessions,
+    "/disconnect": handle_disconnect,
+    "/status": handle_status,
+    "/safe": handle_safe,
+}
+
+
+async def dispatch(api: WebexAPI, room_id: str, text: str) -> None:
+    """Route an incoming message to the appropriate handler."""
+    stripped = text.strip()
+
+    if not stripped.startswith("/"):
+        await handle_text_message(api, room_id, stripped)
+        return
+
+    parts = stripped.split(None, 1)
+    command = parts[0].lower()
+    arg = parts[1] if len(parts) > 1 else ""
+
+    if command == "/connect":
+        await handle_connect(api, room_id, arg.strip())
+    elif command in COMMANDS:
+        await COMMANDS[command](api, room_id)
+    else:
+        await api.send_message(room_id, f"Unknown command: `{command}`\nUse `/help` for available commands.")
+
+
+# ---------------------------------------------------------------------------
+# Polling loop
+# ---------------------------------------------------------------------------
+
+async def poll_loop(api: WebexAPI) -> None:
+    """Poll Webex for new messages in direct rooms."""
+    # Track the newest seen message ID per room to avoid replaying history
+    last_seen: dict[str, str] = {}
+    # Rooms we've initialized (first poll marks position, doesn't process)
+    initialized_rooms: set[str] = set()
+
+    logger.info("Polling started (interval=%.1fs)", POLL_INTERVAL_SECONDS)
+
+    while True:
+        try:
+            rooms = await api.list_direct_rooms(max_rooms=50)
+
+            for room in rooms:
+                room_id = room["id"]
+                messages = await api.list_messages(room_id, max_messages=10)
+
+                if not messages:
+                    continue
+
+                newest_id = messages[0]["id"]
+
+                # First time seeing this room: mark position, skip processing
+                if room_id not in initialized_rooms:
+                    initialized_rooms.add(room_id)
+                    last_seen[room_id] = newest_id
+                    logger.info("Initialized room %s (last_seen=%s)", room_id[:12], newest_id[:12])
+                    continue
+
+                # No new messages
+                if last_seen.get(room_id) == newest_id:
+                    continue
+
+                # Collect messages newer than last-seen
+                new_messages = []
+                for msg in messages:
+                    if msg["id"] == last_seen.get(room_id):
+                        break
+                    new_messages.append(msg)
+
+                # Update position
+                last_seen[room_id] = newest_id
+
+                # Process in chronological order (API returns newest-first)
+                new_messages.reverse()
+
+                for msg in new_messages:
+                    # Skip bot's own messages
+                    if msg.get("personId") == api.bot_id:
+                        continue
+
+                    # Check authorization
+                    sender_email = msg.get("personEmail", "")
+                    if not is_authorized(sender_email):
+                        continue
+
+                    text = msg.get("text", "").strip()
+                    if not text:
+                        continue
+
+                    logger.info("Message from %s: %s", sender_email, text[:80])
+                    await dispatch(api, room_id, text)
+
+        except SystemExit:
+            raise
+        except Exception:
+            logger.exception("Error during poll cycle")
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+        await asyncio.sleep(POLL_INTERVAL_SECONDS)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+async def async_main() -> None:
+    api = WebexAPI()
+    await api.start()
+    try:
+        await poll_loop(api)
+    finally:
+        await api.close()
+
+
+def main() -> None:
+    asyncio.run(async_main())
+
+
+if __name__ == "__main__":
+    main()
