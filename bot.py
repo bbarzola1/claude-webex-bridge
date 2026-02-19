@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 
 from auth import is_authorized
 from claude_cli import send_message as cli_send_message
@@ -89,6 +91,55 @@ def _hard_split_line(line: str, max_bytes: int) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+# Session displays that aren't useful to show
+_SKIP_DISPLAYS = {"/exit", "/help", "/start", "/resume", "/sessions", ""}
+
+
+def _relative_time(epoch_ms: int) -> str:
+    """Convert an epoch-millisecond timestamp to a human-readable relative time."""
+    now = time.time() * 1000
+    diff_seconds = (now - epoch_ms) / 1000
+    if diff_seconds < 0:
+        return "just now"
+    if diff_seconds < 60:
+        return "just now"
+    minutes = int(diff_seconds / 60)
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = int(minutes / 60)
+    if hours < 24:
+        return f"{hours}h ago"
+    days = int(hours / 24)
+    if days < 30:
+        return f"{days}d ago"
+    return f"{int(days / 30)}mo ago"
+
+
+def _short_path(cwd: str) -> str:
+    """Shorten a working directory path for display."""
+    parts = PurePosixPath(cwd).parts
+    home_parts = PurePosixPath.home().parts if hasattr(PurePosixPath, 'home') else ()
+    # Try to make it relative to home
+    try:
+        from pathlib import Path
+        home = str(Path.home())
+        if cwd.startswith(home):
+            relative = cwd[len(home):]
+            if relative.startswith("/"):
+                relative = relative[1:]
+            return f"~/{relative}" if relative else "~"
+    except Exception:
+        pass
+    # Fallback: show last 2 directory components
+    if len(parts) > 2:
+        return f".../{'/'.join(parts[-2:])}"
+    return cwd
+
+
+# ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
 
@@ -108,17 +159,32 @@ async def handle_start(api: WebexAPI, room_id: str) -> None:
 
 async def handle_sessions(api: WebexAPI, room_id: str) -> None:
     state = get_state(room_id)
-    recent = list_recent_sessions()
-    if not recent:
+    # Fetch extra sessions to account for filtered ones
+    all_sessions = list_recent_sessions(limit=20)
+    if not all_sessions:
         await api.send_message(room_id, "No recent sessions found.")
         return
 
-    state.pending_sessions = recent
-    lines = ["**Recent sessions** (use `/connect N` to connect):\n"]
-    for i, s in enumerate(recent, 1):
-        label = s.display if s.display else s.session_id[:12]
-        lines.append(f"{i}. {label}")
+    # Filter out sessions with useless display names
+    filtered = [s for s in all_sessions if s.display.strip().lower() not in _SKIP_DISPLAYS]
 
+    # Fall back to unfiltered if everything got filtered
+    if not filtered:
+        filtered = all_sessions
+
+    # Limit to 10 for display
+    filtered = filtered[:10]
+    state.pending_sessions = filtered
+
+    lines = ["**Recent Sessions**\n"]
+    for i, s in enumerate(filtered, 1):
+        label = s.display if s.display else s.session_id[:12]
+        path = _short_path(s.cwd)
+        ago = _relative_time(s.timestamp)
+        lines.append(f"**{i}.** {label}")
+        lines.append(f"  `{path}` · {ago}\n")
+
+    lines.append("Use `/connect N` to connect to a session.")
     await api.send_message(room_id, "\n".join(lines))
 
 
