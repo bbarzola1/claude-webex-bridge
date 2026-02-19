@@ -8,7 +8,7 @@ Resume and interact with [Claude Code](https://docs.anthropic.com/en/docs/claude
 - **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** installed and on your PATH (`claude --version` should work)
 - At least one prior Claude Code session (the bot reads from `~/.claude/history.jsonl`)
 
-## Setup
+## Quick Start
 
 ### 1. Create a Webex Bot
 
@@ -17,7 +17,46 @@ Resume and interact with [Claude Code](https://docs.anthropic.com/en/docs/claude
 3. Fill in bot name and username, click "Add Bot"
 4. Copy the Bot Access Token (shown only once)
 
-### 2. Configure Environment
+### 2. Run Setup Script
+
+```bash
+./setup.sh
+```
+
+The setup script will:
+- Create a virtual environment
+- Install dependencies
+- Prompt for your bot token and email
+- Create the `.env` file
+
+### 3. Create 1:1 Room
+
+In Webex, search for your bot's username and send it any message to create the direct room.
+
+### 4. Start the Bot
+
+```bash
+./start.sh
+```
+
+The bot runs in the background. Use these commands to manage it:
+
+```bash
+./status.sh   # Check if bot is running
+./logs.sh     # View recent logs
+./logs.sh -f  # Follow logs in real-time
+./stop.sh     # Stop the bot
+./restart.sh  # Restart the bot
+```
+
+## Manual Setup
+
+If you prefer not to use the automated scripts:
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
+
+### 1. Create `.env` file
 
 ```bash
 cp .env.example .env
@@ -30,25 +69,21 @@ WEBEX_BOT_TOKEN=your-bot-access-token
 WEBEX_USER_EMAIL=your-email@example.com
 ```
 
-### 3. Install Dependencies
+### 2. Install Dependencies
 
 ```bash
 pip3 install -r requirements.txt
 ```
 
-Requires Python 3.9+. Uses `httpx` for async HTTP (no websocket or webhook dependencies).
-
-### 4. Create the 1:1 Room
-
-In the Webex client, search for your bot's username and send it any message. This creates the direct room the bot will poll.
-
-### 5. Run
+### 3. Run Manually
 
 ```bash
 python3 bot.py
 ```
 
 You should see `Bot authenticated as: ...` in the logs.
+
+</details>
 
 ## Commands
 

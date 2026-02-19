@@ -1,6 +1,10 @@
 # Environment and secrets
 .env
 
+# Bot runtime
+.bot.pid
+venv/
+
 # Python
 __pycache__/
 *.pyc

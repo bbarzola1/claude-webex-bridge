@@ -16,6 +16,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress httpx INFO logs (too verbose during polling)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 @dataclass
 class BotState:
