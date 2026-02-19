@@ -66,12 +66,11 @@ async def send_message(
 
     if process.returncode != 0:
         error_msg = f"CLI exited with code {process.returncode}."
-        if "expired" in stderr_text.lower() or "credential" in stderr_text.lower():
-            error_msg += "\n\nThis looks like an AWS credentials issue. Check your credentials."
         if stderr_text:
-            # Truncate long stderr
-            truncated = stderr_text[:1000] + ("..." if len(stderr_text) > 1000 else "")
-            error_msg += f"\n\nstderr:\n{truncated}"
+            # Log stderr server-side only (may contain secrets)
+            logger.error("CLI stderr: %s", stderr_text[:1000])
+        if "expired" in stderr_text.lower() or "credential" in stderr_text.lower():
+            error_msg += "\n\nThis may be an AWS credentials issue. Check your credentials."
         return error_msg
 
     if not stdout_text:

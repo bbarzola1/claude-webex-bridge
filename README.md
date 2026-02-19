@@ -111,9 +111,9 @@ claude_cli.py   # Async wrapper around the `claude` CLI
 
 ### Why Polling
 
-- `webex-bot` (websocket library) requires Python 3.10+ — system Python is 3.9
-- Webhooks require a public URL (ngrok, etc.) — unnecessary for a personal bot
-- Polling via `httpx` works on Python 3.9, needs no public URL, and adds ~2.5s latency (negligible when CLI calls take seconds-to-minutes)
+- Polling keeps the minimum Python version at 3.9 (`webex-bot` websocket library requires 3.10+)
+- No public URL needed (webhooks require ngrok or similar — unnecessary for a personal bot)
+- ~2.5s latency is negligible when CLI calls take seconds-to-minutes
 
 ### Key Design Decisions
 
@@ -123,12 +123,12 @@ claude_cli.py   # Async wrapper around the `claude` CLI
 - **"Thinking..." pattern** sends a placeholder message, then edits it with the first response chunk (falls back to a new message if the edit fails).
 - **Concurrency guard** prevents overlapping CLI calls — a second message while one is processing gets a "still processing" reply.
 - **Rate-limit handling** retries on 429 responses using the `Retry-After` header, up to 3 times.
-- **Permission modes**: `skip-permissions` (default) auto-approves tool use. `safe` mode respects approval prompts, but `--print` mode cannot show interactive prompts, so this may cause the CLI to hang.
+- **Permission modes**: `safe` (default) respects approval prompts. `skip-permissions` mode auto-approves tool use. Toggle with `/safe`. Note: in safe mode, `--print` cannot show interactive prompts, so the CLI may hang on approval requests — use `/safe` to switch to skip-permissions if this happens.
 - **CLI timeout** kills the process after 5 minutes to prevent runaway sessions.
 
 ### Shared Modules
 
-`sessions.py` and `claude_cli.py` are shared verbatim with [claude-telegram-bridge](../claude-telegram-bridge/). They import constants from `config.py`, which each project defines independently.
+`sessions.py` and `claude_cli.py` are designed to be reusable across different chat platform bridges. They import constants from `config.py`, which each project defines independently.
 
 ## Security
 

@@ -1,4 +1,5 @@
 #!/bin/bash
+cd "$(dirname "$0")"
 
 PID_FILE=".bot.pid"
 LOG_FILE="bot.log"
@@ -32,7 +33,7 @@ echo "Starting Claude Webex Bridge..."
 
 # Activate venv and start bot in background
 source venv/bin/activate
-nohup python3 bot.py > "$LOG_FILE" 2>&1 &
+nohup python3 bot.py >> "$LOG_FILE" 2>&1 &
 BOT_PID=$!
 
 # Save PID

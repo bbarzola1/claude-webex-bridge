@@ -1,4 +1,5 @@
 #!/bin/bash
+cd "$(dirname "$0")"
 
 PID_FILE=".bot.pid"
 LOG_FILE="bot.log"

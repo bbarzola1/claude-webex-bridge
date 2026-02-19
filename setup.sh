@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+cd "$(dirname "$0")"
 
 echo "=========================================="
 echo "Claude Webex Bridge - Setup"
@@ -13,7 +14,13 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+PYTHON_OK=$(python3 -c 'import sys; print(1 if sys.version_info >= (3, 9) else 0)')
 echo "✓ Found Python $PYTHON_VERSION"
+
+if [ "$PYTHON_OK" != "1" ]; then
+    echo "❌ Error: Python 3.9 or higher is required (found $PYTHON_VERSION)"
+    exit 1
+fi
 
 # Check if claude CLI is available
 if ! command -v claude &> /dev/null; then

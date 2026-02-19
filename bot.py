@@ -25,12 +25,19 @@ class BotState:
     session_id: str | None = None
     session_cwd: str | None = None
     session_label: str = ""
-    skip_permissions: bool = True
+    skip_permissions: bool = False
     pending_sessions: list[SessionInfo] = field(default_factory=list)
     processing: bool = False
 
 
-state = BotState()
+_room_states: dict[str, BotState] = {}
+
+
+def get_state(room_id: str) -> BotState:
+    """Get or create per-room bot state."""
+    if room_id not in _room_states:
+        _room_states[room_id] = BotState()
+    return _room_states[room_id]
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +107,7 @@ async def handle_start(api: WebexAPI, room_id: str) -> None:
 
 
 async def handle_sessions(api: WebexAPI, room_id: str) -> None:
+    state = get_state(room_id)
     recent = list_recent_sessions()
     if not recent:
         await api.send_message(room_id, "No recent sessions found.")
@@ -115,6 +123,7 @@ async def handle_sessions(api: WebexAPI, room_id: str) -> None:
 
 
 async def handle_connect(api: WebexAPI, room_id: str, arg: str) -> None:
+    state = get_state(room_id)
     if not arg:
         await api.send_message(room_id, "Usage: `/connect N` (run `/sessions` first)")
         return
@@ -160,6 +169,7 @@ async def handle_connect(api: WebexAPI, room_id: str, arg: str) -> None:
 
 
 async def handle_disconnect(api: WebexAPI, room_id: str) -> None:
+    state = get_state(room_id)
     if state.session_id is None:
         await api.send_message(room_id, "Not connected to any session.")
         return
@@ -172,6 +182,7 @@ async def handle_disconnect(api: WebexAPI, room_id: str) -> None:
 
 
 async def handle_status(api: WebexAPI, room_id: str) -> None:
+    state = get_state(room_id)
     if state.session_id is None:
         connected = "Not connected"
     else:
@@ -186,6 +197,7 @@ async def handle_status(api: WebexAPI, room_id: str) -> None:
 
 
 async def handle_safe(api: WebexAPI, room_id: str) -> None:
+    state = get_state(room_id)
     state.skip_permissions = not state.skip_permissions
 
     if state.skip_permissions:
@@ -206,6 +218,7 @@ async def handle_safe(api: WebexAPI, room_id: str) -> None:
 
 async def handle_text_message(api: WebexAPI, room_id: str, text: str) -> None:
     """Forward a plain text message to the connected Claude session."""
+    state = get_state(room_id)
     if state.session_id is None:
         await api.send_message(room_id, "Not connected. Use `/sessions` to pick a session.")
         return
@@ -215,6 +228,7 @@ async def handle_text_message(api: WebexAPI, room_id: str, text: str) -> None:
         return
 
     state.processing = True
+    thinking_id = None
     try:
         # Send "Thinking..." placeholder
         thinking = await api.send_message(room_id, "Thinking...")
@@ -240,6 +254,13 @@ async def handle_text_message(api: WebexAPI, room_id: str, text: str) -> None:
         # Send remaining chunks as new messages
         for chunk in chunks[1:]:
             await api.send_message(room_id, chunk)
+    except Exception:
+        logger.exception("Error processing message")
+        error_text = "An error occurred while processing your message. Check the bot logs for details."
+        if thinking_id:
+            await api.edit_message(thinking_id, room_id, error_text)
+        else:
+            await api.send_message(room_id, error_text)
     finally:
         state.processing = False
 
