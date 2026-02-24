@@ -7,6 +7,8 @@ echo "Claude Webex Bridge - Setup"
 echo "=========================================="
 echo ""
 
+# ---------- Prerequisites ----------
+
 # Check Python version
 if ! command -v python3 &> /dev/null; then
     echo "❌ Error: python3 not found. Please install Python 3.9 or higher."
@@ -35,7 +37,8 @@ if ! command -v claude &> /dev/null; then
     fi
 fi
 
-# Create virtual environment
+# ---------- Virtual environment & dependencies ----------
+
 if [ -d "venv" ]; then
     echo "✓ Virtual environment already exists"
 else
@@ -44,40 +47,80 @@ else
     echo "✓ Virtual environment created"
 fi
 
-# Activate venv and install dependencies
 echo "Installing dependencies..."
 source venv/bin/activate
 pip3 install -q --upgrade pip
 pip3 install -q -r requirements.txt
 echo "✓ Dependencies installed"
 
-# Setup .env file
+# ---------- .env configuration ----------
+
 if [ -f ".env" ]; then
     echo "✓ .env file already exists"
     read -p "Overwrite existing .env? (y/n) " -n 1 -r
     echo ""
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Skipping .env setup"
+        SKIP_ENV=1
     else
         rm .env
     fi
 fi
 
-if [ ! -f ".env" ]; then
+if [ -z "$SKIP_ENV" ] && [ ! -f ".env" ]; then
     echo ""
-    echo "Setting up .env configuration..."
+    echo "=========================================="
+    echo "Step 1: Create your Webex bot"
+    echo "=========================================="
+    echo ""
+    echo "Opening the Webex developer portal in your browser..."
+    echo "Create a new bot there, then copy the Bot Access Token."
     echo ""
 
-    # Prompt for bot token
-    echo "Enter your Webex Bot Access Token:"
-    echo "(Get it from: https://developer.webex.com/my-apps)"
-    read -r BOT_TOKEN
+    # Open browser to bot creation page (works on macOS, Linux, WSL)
+    URL="https://developer.webex.com/my-apps/new/bot"
+    if command -v open &> /dev/null; then
+        open "$URL"
+    elif command -v xdg-open &> /dev/null; then
+        xdg-open "$URL"
+    elif command -v wslview &> /dev/null; then
+        wslview "$URL"
+    else
+        echo "Could not open browser automatically."
+        echo "Please visit: $URL"
+    fi
 
-    # Prompt for email
+    echo "Fill in the bot details on the page, then copy the token."
     echo ""
-    echo "Enter your Webex email address:"
-    echo "(Only this email will be able to use the bot)"
-    read -r USER_EMAIL
+    read -p "Paste your Bot Access Token here: " -r BOT_TOKEN
+    echo ""
+
+    # Validate the token
+    echo "Validating token..."
+    VALIDATE_RESULT=$(curl -s -w "\n%{http_code}" \
+        -H "Authorization: Bearer $BOT_TOKEN" \
+        "https://webexapis.com/v1/people/me" 2>/dev/null)
+
+    HTTP_CODE=$(echo "$VALIDATE_RESULT" | tail -1)
+    BODY=$(echo "$VALIDATE_RESULT" | sed '$d')
+
+    if [ "$HTTP_CODE" = "200" ]; then
+        BOT_NAME=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('displayName','(unknown)'))" 2>/dev/null || echo "(unknown)")
+        echo "✓ Token valid — bot name: $BOT_NAME"
+    else
+        echo "❌ Token validation failed (HTTP $HTTP_CODE)."
+        echo "   Make sure you copied the full token."
+        exit 1
+    fi
+
+    echo ""
+    echo "=========================================="
+    echo "Step 2: Your Webex email"
+    echo "=========================================="
+    echo ""
+    echo "Only this email will be able to use the bot."
+    read -p "Enter your Webex email: " -r USER_EMAIL
+    echo ""
 
     # Write .env file
     cat > .env <<EOF
@@ -88,6 +131,8 @@ EOF
     echo "✓ .env file created"
 fi
 
+# ---------- Finish ----------
+
 # Make scripts executable
 chmod +x start.sh stop.sh status.sh logs.sh 2>/dev/null || true
 
@@ -96,10 +141,8 @@ echo "=========================================="
 echo "✅ Setup complete!"
 echo "=========================================="
 echo ""
-echo "Next steps:"
-echo "1. Open Webex and message your bot to create a 1:1 room"
-echo "2. Run: ./start.sh"
-echo "3. Send commands to your bot in Webex"
+echo "Run: ./start.sh"
+echo "The bot will message you in Webex automatically."
 echo ""
 echo "Available scripts:"
 echo "  ./start.sh  - Start the bot"
