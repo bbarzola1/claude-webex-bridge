@@ -10,15 +10,18 @@ Resume and interact with [Claude Code](https://docs.anthropic.com/en/docs/claude
 
 ## Quick Start
 
-### Option A: One-Click (Recommended)
-
 ```bash
+cd claude-webex-bridge
 python3 run.py
 ```
 
-This handles everything: checks prerequisites, creates a virtual environment, installs dependencies, walks you through bot token setup, and starts the bot. On macOS you can also double-click `Run.command`.
+That's it. The script checks prerequisites, creates a virtual environment, installs dependencies, walks you through Webex bot token setup, and starts the bot. On subsequent runs it skips setup and goes straight to launch.
 
-### Option B: Step-by-Step
+> **macOS note:** You can also double-click `Run.command`, but macOS Gatekeeper may block it. If that happens, just use `python3 run.py` from Terminal instead.
+
+### Alternative: Step-by-Step Setup
+
+If you prefer to set things up manually:
 
 #### 1. Create a Webex Bot
 
@@ -32,12 +35,6 @@ This handles everything: checks prerequisites, creates a virtual environment, in
 ```bash
 ./setup.sh
 ```
-
-The setup script will:
-- Create a virtual environment
-- Install dependencies
-- Prompt for your bot token and email
-- Create the `.env` file
 
 #### 3. Start the Bot
 

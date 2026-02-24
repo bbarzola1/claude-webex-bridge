@@ -132,6 +132,17 @@ def _check_claude_cli():
 # Environment setup
 # ---------------------------------------------------------------------------
 
+def _deps_need_install():
+    """Check if dependencies need to be (re)installed."""
+    marker = Path(VENV_DIR) / ".deps_installed"
+    if not marker.exists():
+        return True
+    # Reinstall if requirements.txt was modified after the marker
+    req_mtime = Path(REQUIREMENTS_FILE).stat().st_mtime
+    marker_mtime = marker.stat().st_mtime
+    return req_mtime > marker_mtime
+
+
 def _setup_venv():
     venv_python = _venv_python()
 
@@ -145,11 +156,16 @@ def _setup_venv():
         )
         _ok("Virtual environment created")
 
-    print("  Installing dependencies...")
-    pip = str(_venv_pip())
-    subprocess.run([pip, "install", "-q", "--upgrade", "pip"], check=True)
-    subprocess.run([pip, "install", "-q", "-r", REQUIREMENTS_FILE], check=True)
-    _ok("Dependencies installed")
+    if _deps_need_install():
+        print("  Installing dependencies...")
+        pip = str(_venv_pip())
+        subprocess.run([pip, "install", "-q", "--upgrade", "pip"], check=True)
+        subprocess.run([pip, "install", "-q", "-r", REQUIREMENTS_FILE], check=True)
+        # Write marker so we skip next time
+        Path(VENV_DIR, ".deps_installed").touch()
+        _ok("Dependencies installed")
+    else:
+        _ok("Dependencies up to date")
 
 
 # ---------------------------------------------------------------------------
