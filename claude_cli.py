@@ -2,10 +2,16 @@ import asyncio
 import logging
 import os
 import shutil
+import uuid
 
 from config import CLI_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
+
+
+def generate_session_id() -> str:
+    """Generate a new UUID suitable for a Claude Code session."""
+    return str(uuid.uuid4())
 
 
 def _clean_env() -> dict[str, str]:
@@ -73,6 +79,74 @@ async def send_message(
         error_msg = f"Claude encountered an error (exit code {process.returncode}). Try sending your message again, or disconnect and reconnect."
         if stderr_text:
             # Log stderr server-side only (may contain secrets)
+            logger.error("CLI stderr: %s", stderr_text[:1000])
+        if "expired" in stderr_text.lower() or "credential" in stderr_text.lower():
+            error_msg += "\n\nThis may be an AWS credentials issue. Check your credentials."
+        return error_msg
+
+    if not stdout_text:
+        return "Claude completed the request but returned no output."
+
+    return stdout_text
+
+
+async def start_new_session(
+    session_id: str,
+    message: str,
+    cwd: str,
+    skip_permissions: bool = True,
+    on_process_started: object = None,
+) -> str:
+    """Start a new Claude Code session and send the first message."""
+    claude_path = shutil.which("claude")
+    if claude_path is None:
+        return "Error: 'claude' CLI not found on PATH. Make sure Claude Code is installed."
+
+    cmd = [
+        claude_path,
+        "--print",
+        "--output-format", "text",
+        "--session-id", session_id,
+    ]
+    if skip_permissions:
+        cmd.append("--dangerously-skip-permissions")
+    cmd.append("--")
+    cmd.append(message)
+
+    logger.info("Starting new session: %s (cwd=%s)", " ".join(cmd[:6]) + " ...", cwd)
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
+            env=_clean_env(),
+        )
+    except FileNotFoundError:
+        return "Error: 'claude' CLI not found on PATH. Make sure Claude Code is installed."
+    except OSError as e:
+        return f"Error starting CLI: {e}"
+
+    if on_process_started is not None:
+        on_process_started(process)
+
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=CLI_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.wait()
+        return f"Error: CLI timed out after {CLI_TIMEOUT_SECONDS} seconds. The process was killed."
+
+    stdout_text = stdout.decode("utf-8", errors="replace").strip()
+    stderr_text = stderr.decode("utf-8", errors="replace").strip()
+
+    if process.returncode != 0:
+        error_msg = f"Claude encountered an error (exit code {process.returncode}). Try sending your message again."
+        if stderr_text:
             logger.error("CLI stderr: %s", stderr_text[:1000])
         if "expired" in stderr_text.lower() or "credential" in stderr_text.lower():
             error_msg += "\n\nThis may be an AWS credentials issue. Check your credentials."

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
 from auth import is_authorized
-from claude_cli import send_message as cli_send_message
+from claude_cli import generate_session_id, send_message as cli_send_message, start_new_session as cli_start_new_session
 from config import POLL_INTERVAL_SECONDS, WEBEX_MAX_MESSAGE_BYTES, WEBEX_USER_EMAIL
 from sessions import SessionInfo, get_session_by_id, list_recent_sessions
 from webex_api import WebexAPI
@@ -27,6 +27,7 @@ class BotState:
     session_id: str | None = None
     session_cwd: str | None = None
     session_label: str = ""
+    session_is_new: bool = False
     skip_permissions: bool = False
     pending_sessions: list[SessionInfo] = field(default_factory=list)
     processing: bool = False
@@ -148,6 +149,7 @@ def _short_path(cwd: str) -> str:
 def _build_welcome_card() -> tuple[dict, str]:
     """Build the welcome Adaptive Card and fallback text."""
     commands = [
+        ("/new [dir]", "Start a new session"),
         ("/sessions", "List recent sessions"),
         ("/resume N", "Resume session N from the list"),
         ("/resume", "Quick-resume latest session"),
@@ -341,6 +343,7 @@ async def _connect_to_session(api: WebexAPI, room_id: str, session: SessionInfo)
     state.session_id = session.session_id
     state.session_cwd = session.cwd
     state.session_label = session.display or session.session_id[:12]
+    state.session_is_new = False
 
     mode_label = "skip-permissions" if state.skip_permissions else "safe"
     mode_desc = "Auto-approve tools" if state.skip_permissions else "Ask before tools"
@@ -378,6 +381,72 @@ async def _connect_to_session(api: WebexAPI, room_id: str, session: SessionInfo)
         f"**Directory:** {path}\n"
         f"**Mode:** {mode_label}\n\n"
         "Send a message to interact with this session."
+    )
+    await api.send_card_message(room_id, card, fallback)
+
+
+async def handle_new_session(api: WebexAPI, room_id: str, arg: str) -> None:
+    """Start a brand new Claude Code session."""
+    state = get_state(room_id)
+
+    # Determine working directory
+    if arg:
+        cwd = arg
+        # Validate directory exists (run in thread to avoid blocking)
+        from pathlib import Path
+        target = Path(cwd).expanduser()
+        if not target.is_dir():
+            await api.send_message(room_id, f"Directory not found: `{cwd}`")
+            return
+        cwd = str(target)
+    else:
+        from pathlib import Path
+        cwd = str(Path.home())
+
+    # Generate a new session ID
+    new_id = generate_session_id()
+
+    # Update state
+    state.session_id = new_id
+    state.session_cwd = cwd
+    state.session_label = "New session"
+    state.session_is_new = True
+
+    mode_label = "skip-permissions" if state.skip_permissions else "safe"
+    mode_desc = "Auto-approve tools" if state.skip_permissions else "Ask before tools"
+    path = _short_path(cwd)
+
+    card = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": "\u2728 New Session",
+                "size": "Medium",
+                "weight": "Bolder",
+            },
+            {
+                "type": "FactSet",
+                "facts": [
+                    {"title": "Directory", "value": path},
+                    {"title": "Mode", "value": f"{mode_label} ({mode_desc})"},
+                ],
+            },
+            {
+                "type": "TextBlock",
+                "text": "Send your first message to begin.",
+                "isSubtle": True,
+                "spacing": "Medium",
+            },
+        ],
+    }
+    fallback = (
+        f"**New Session**\n"
+        f"**Directory:** {path}\n"
+        f"**Mode:** {mode_label}\n\n"
+        "Send your first message to begin."
     )
     await api.send_card_message(room_id, card, fallback)
 
@@ -433,6 +502,7 @@ async def handle_disconnect(api: WebexAPI, room_id: str) -> None:
     state.session_id = None
     state.session_cwd = None
     state.session_label = ""
+    state.session_is_new = False
     await api.send_message(room_id, f"Disconnected from: {label}\n\nUse `/sessions` to connect to another session.")
 
 
@@ -596,13 +666,26 @@ async def handle_text_message(api: WebexAPI, room_id: str, text: str) -> None:
                 _update_thinking(api, thinking_id, room_id)
             )
 
-        response = await cli_send_message(
-            session_id=state.session_id,
-            message=text,
-            cwd=state.session_cwd,
-            skip_permissions=state.skip_permissions,
-            on_process_started=lambda p: setattr(state, '_active_process', p),
-        )
+        was_new = state.session_is_new
+        if was_new:
+            response = await cli_start_new_session(
+                session_id=state.session_id,
+                message=text,
+                cwd=state.session_cwd,
+                skip_permissions=state.skip_permissions,
+                on_process_started=lambda p: setattr(state, '_active_process', p),
+            )
+            # Only flip the flag if the CLI didn't return an error
+            if not response.startswith("Error:"):
+                state.session_is_new = False
+        else:
+            response = await cli_send_message(
+                session_id=state.session_id,
+                message=text,
+                cwd=state.session_cwd,
+                skip_permissions=state.skip_permissions,
+                on_process_started=lambda p: setattr(state, '_active_process', p),
+            )
 
         chunks = split_message(response)
 
@@ -661,6 +744,8 @@ async def dispatch(api: WebexAPI, room_id: str, text: str) -> None:
 
     if command == "/resume":
         await handle_connect(api, room_id, arg.strip())
+    elif command == "/new":
+        await handle_new_session(api, room_id, arg.strip())
     elif command in COMMANDS:
         await COMMANDS[command](api, room_id)
     else:
