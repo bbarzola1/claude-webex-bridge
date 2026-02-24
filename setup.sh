@@ -122,10 +122,10 @@ if [ -z "$SKIP_ENV" ] && [ ! -f ".env" ]; then
     read -p "Enter your Webex email: " -r USER_EMAIL
     echo ""
 
-    # Write .env file
+    # Write .env file (quote values to handle special characters)
     cat > .env <<EOF
-WEBEX_BOT_TOKEN=$BOT_TOKEN
-WEBEX_USER_EMAIL=$USER_EMAIL
+WEBEX_BOT_TOKEN="${BOT_TOKEN}"
+WEBEX_USER_EMAIL="${USER_EMAIL}"
 EOF
 
     echo "✓ .env file created"
@@ -134,7 +134,7 @@ fi
 # ---------- Finish ----------
 
 # Make scripts executable
-chmod +x start.sh stop.sh status.sh logs.sh 2>/dev/null || true
+chmod +x start.sh stop.sh status.sh logs.sh restart.sh 2>/dev/null || true
 
 echo ""
 echo "=========================================="

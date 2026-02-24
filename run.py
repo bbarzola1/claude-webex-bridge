@@ -230,8 +230,8 @@ def _setup_env(force=False):
     email = _prompt_email()
 
     env_path.write_text(
-        f"WEBEX_BOT_TOKEN={token}\n"
-        f"WEBEX_USER_EMAIL={email}\n"
+        f'WEBEX_BOT_TOKEN="{token}"\n'
+        f'WEBEX_USER_EMAIL="{email}"\n'
     )
 
     print()
@@ -244,7 +244,6 @@ def _setup_env(force=False):
 
 def _start_bot():
     venv_python = str(_venv_python())
-    script_dir = os.path.dirname(os.path.abspath(__file__)) or "."
 
     print(
         f"\n{BOLD}Starting Claude Webex Bridge...{RESET}\n"
@@ -253,7 +252,8 @@ def _start_bot():
     )
 
     try:
-        subprocess.run([venv_python, "bot.py"], cwd=script_dir)
+        # cwd already set to script directory by main()
+        subprocess.run([venv_python, "bot.py"])
     except KeyboardInterrupt:
         print(f"\n\n{BOLD}Bot stopped.{RESET}")
 

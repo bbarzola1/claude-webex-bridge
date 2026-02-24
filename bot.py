@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
+from pathlib import Path
 
 from auth import is_authorized
 from claude_cli import generate_session_id, send_message as cli_send_message, start_new_session as cli_start_new_session
@@ -31,7 +31,7 @@ class BotState:
     skip_permissions: bool = False
     pending_sessions: list[SessionInfo] = field(default_factory=list)
     processing: bool = False
-    _active_process: object = field(default=None, repr=False)
+    _active_process: asyncio.subprocess.Process | None = field(default=None, repr=False)
     _thinking_id: str | None = field(default=None, repr=False)
 
 
@@ -84,7 +84,8 @@ def _hard_split_line(line: str, max_bytes: int) -> list[str]:
     for char in line:
         candidate = current + char
         if len(candidate.encode("utf-8")) > max_bytes:
-            parts.append(current)
+            if current:
+                parts.append(current)
             current = char
         else:
             current = candidate
@@ -123,20 +124,17 @@ def _relative_time(epoch_ms: int) -> str:
 
 def _short_path(cwd: str) -> str:
     """Shorten a working directory path for display."""
-    parts = PurePosixPath(cwd).parts
-    home_parts = PurePosixPath.home().parts if hasattr(PurePosixPath, 'home') else ()
-    # Try to make it relative to home
     try:
-        from pathlib import Path
         home = str(Path.home())
         if cwd.startswith(home):
             relative = cwd[len(home):]
-            if relative.startswith("/"):
+            if relative.startswith("/") or relative.startswith("\\"):
                 relative = relative[1:]
             return f"~/{relative}" if relative else "~"
     except Exception:
         pass
     # Fallback: show last 2 directory components
+    parts = Path(cwd).parts
     if len(parts) > 2:
         return f".../{'/'.join(parts[-2:])}"
     return cwd
@@ -391,16 +389,12 @@ async def handle_new_session(api: WebexAPI, room_id: str, arg: str) -> None:
 
     # Determine working directory
     if arg:
-        cwd = arg
-        # Validate directory exists (run in thread to avoid blocking)
-        from pathlib import Path
-        target = Path(cwd).expanduser()
+        target = Path(arg).expanduser().resolve()
         if not target.is_dir():
-            await api.send_message(room_id, f"Directory not found: `{cwd}`")
+            await api.send_message(room_id, f"Directory not found: `{arg}`")
             return
         cwd = str(target)
     else:
-        from pathlib import Path
         cwd = str(Path.home())
 
     # Generate a new session ID
@@ -647,6 +641,7 @@ async def handle_text_message(api: WebexAPI, room_id: str, text: str) -> None:
         await api.send_message(room_id, "Not connected to any session. Use `/sessions` to browse and connect.")
         return
 
+    # Safe without a lock because the poll loop dispatches messages sequentially (await).
     if state.processing:
         await api.send_message(room_id, "**Still processing** the previous message. Please wait, or use `/cancel` to abort.")
         return

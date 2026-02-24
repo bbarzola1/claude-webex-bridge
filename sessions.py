@@ -47,6 +47,7 @@ def _extract_cwd(session_path: Path) -> str:
                 continue
             if entry.get("type") == "user" and "cwd" in entry:
                 return entry["cwd"]
+    logger.warning("No cwd found in session %s, falling back to home directory", session_path.stem)
     return str(Path.home())
 
 

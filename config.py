@@ -20,7 +20,7 @@ WEBEX_BOT_TOKEN: str = _require_env("WEBEX_BOT_TOKEN")
 WEBEX_USER_EMAIL: str = _require_env("WEBEX_USER_EMAIL")
 
 WEBEX_BASE_URL: str = "https://webexapis.com/v1"
-WEBEX_MAX_MESSAGE_BYTES: int = 7000
+WEBEX_MAX_MESSAGE_BYTES: int = 7000  # Webex limit is ~7439 bytes; 7000 for safety margin
 POLL_INTERVAL_SECONDS: float = 2.5
 
 # Shared constants — names must match what sessions.py and claude_cli.py import

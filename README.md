@@ -10,14 +10,24 @@ Resume and interact with [Claude Code](https://docs.anthropic.com/en/docs/claude
 
 ## Quick Start
 
-### 1. Create a Webex Bot
+### Option A: One-Click (Recommended)
+
+```bash
+python3 run.py
+```
+
+This handles everything: checks prerequisites, creates a virtual environment, installs dependencies, walks you through bot token setup, and starts the bot. On macOS you can also double-click `Run.command`.
+
+### Option B: Step-by-Step
+
+#### 1. Create a Webex Bot
 
 1. Go to [developer.webex.com](https://developer.webex.com) and sign in
 2. Avatar menu -> "My Webex Apps" -> "Create a New App" -> "Create a Bot"
 3. Fill in bot name and username, click "Add Bot"
 4. Copy the Bot Access Token (shown only once)
 
-### 2. Run Setup Script
+#### 2. Run Setup Script
 
 ```bash
 ./setup.sh
@@ -29,11 +39,7 @@ The setup script will:
 - Prompt for your bot token and email
 - Create the `.env` file
 
-### 3. Create 1:1 Room
-
-In Webex, search for your bot's username and send it any message to create the direct room.
-
-### 4. Start the Bot
+#### 3. Start the Bot
 
 ```bash
 ./start.sh
@@ -90,11 +96,14 @@ You should see `Bot authenticated as: ...` in the logs.
 | Command | Description |
 |---|---|
 | `/start` or `/help` | Welcome message with available commands |
+| `/new [dir]` | Start a new session (defaults to home directory) |
 | `/sessions` | List recent sessions as a numbered list |
-| `/connect N` | Connect to session N from the list |
+| `/resume N` | Resume session N from the list |
+| `/resume` | Quick-resume the most recent session |
 | `/disconnect` | Disconnect from current session |
 | `/status` | Show connection status and permission mode |
 | `/safe` | Toggle permission mode (skip-permissions / safe) |
+| `/cancel` | Cancel a running command |
 
 Connect to a session, then send plain text messages to interact with Claude Code.
 
@@ -118,7 +127,7 @@ claude_cli.py   # Async wrapper around the `claude` CLI
 ### Key Design Decisions
 
 - **Session discovery** reads Claude Code's own history and project files — no separate database needed.
-- **Numbered session list** + `/connect N` replaces Telegram's inline keyboard buttons (Webex doesn't have an equivalent).
+- **Numbered session list** + `/resume N` replaces Telegram's inline keyboard buttons (Webex doesn't have an equivalent).
 - **Byte-aware message splitting** respects Webex's 7,439-byte message limit by splitting on UTF-8 byte length, not character count.
 - **"Thinking..." pattern** sends a placeholder message, then edits it with the first response chunk (falls back to a new message if the edit fails).
 - **Concurrency guard** prevents overlapping CLI calls — a second message while one is processing gets a "still processing" reply.

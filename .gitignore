@@ -24,5 +24,11 @@ __pycache__/
 *.swp
 *.swo
 
+# macOS app bundle (build artifact)
+ClaudeWebexBridge.app/
+
+# Local docs
+docs/
+
 # Claude Code guidance (local only)
 CLAUDE.md

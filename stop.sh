@@ -20,6 +20,9 @@ fi
 
 echo "Stopping bot (PID: $PID)..."
 
+# Kill any child claude CLI processes first
+pkill -P "$PID" 2>/dev/null
+
 # Try graceful shutdown first (SIGTERM)
 kill "$PID" 2>/dev/null
 
