@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Webex Bridge</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79b8ff;
+            --green: #3fb950;
+            --purple: #bc8cff;
+            --orange: #d29922;
+            --radius: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* ---- Hero ---- */
+        .hero {
+            text-align: center;
+            padding: 80px 0 60px;
+        }
+
+        .hero-badge {
+            display: inline-block;
+            background: rgba(88, 166, 255, 0.1);
+            border: 1px solid rgba(88, 166, 255, 0.3);
+            color: var(--accent);
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 4px 14px;
+            border-radius: 999px;
+            margin-bottom: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+        }
+
+        .hero p {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 36px;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #0d1117;
+        }
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            text-decoration: none;
+            color: #0d1117;
+        }
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover {
+            border-color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        /* ---- Features ---- */
+        .features {
+            padding: 60px 0;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 40px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+        }
+
+        .feature-icon {
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.05rem;
+            margin-bottom: 8px;
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* ---- Install ---- */
+        .install {
+            padding: 60px 0;
+        }
+
+        .install h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 40px;
+        }
+
+        .steps {
+            display: grid;
+            gap: 24px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .step {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .step-number {
+            flex-shrink: 0;
+            width: 36px;
+            height: 36px;
+            background: rgba(88, 166, 255, 0.15);
+            color: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .step-content h3 {
+            font-size: 1rem;
+            margin-bottom: 6px;
+        }
+
+        .step-content p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+
+        .code-block {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 18px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block .comment {
+            color: var(--text-secondary);
+        }
+
+        .code-block .cmd {
+            color: var(--green);
+        }
+
+        /* ---- Commands ---- */
+        .commands {
+            padding: 60px 0;
+        }
+
+        .commands h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 40px;
+        }
+
+        .command-table {
+            max-width: 700px;
+            margin: 0 auto;
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .command-table th {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 2px solid var(--border);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .command-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        .command-table td:first-child {
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .command-table td:last-child {
+            color: var(--text-secondary);
+        }
+
+        /* ---- Architecture ---- */
+        .architecture {
+            padding: 60px 0;
+        }
+
+        .architecture h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 16px;
+        }
+
+        .architecture > .container > p {
+            text-align: center;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+
+        .arch-diagram {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            max-width: 700px;
+            margin: 0 auto;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.85rem;
+            line-height: 1.8;
+            text-align: center;
+            overflow-x: auto;
+        }
+
+        .arch-diagram .flow-label {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .arch-diagram .flow-box {
+            display: inline-block;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 16px;
+            margin: 4px;
+        }
+
+        .arch-diagram .flow-accent { border-color: var(--accent); color: var(--accent); }
+        .arch-diagram .flow-green  { border-color: var(--green);  color: var(--green);  }
+        .arch-diagram .flow-purple { border-color: var(--purple); color: var(--purple); }
+
+        .arch-diagram .flow-arrow {
+            color: var(--text-secondary);
+            margin: 0 4px;
+        }
+
+        .arch-modules {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            max-width: 700px;
+            margin: 24px auto 0;
+        }
+
+        .arch-mod {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .arch-mod h4 {
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.85rem;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .arch-mod p {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* ---- FAQ ---- */
+        .faq {
+            padding: 60px 0;
+        }
+
+        .faq h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 40px;
+        }
+
+        .faq-list {
+            max-width: 700px;
+            margin: 0 auto;
+            display: grid;
+            gap: 20px;
+        }
+
+        .faq-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+        }
+
+        .faq-item h3 {
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+
+        .faq-item p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .faq-item code {
+            background: var(--bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        /* ---- Prerequisites ---- */
+        .prereqs {
+            padding: 60px 0;
+        }
+
+        .prereqs h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 40px;
+        }
+
+        .prereq-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .prereq-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            text-align: center;
+        }
+
+        .prereq-card h3 {
+            font-size: 0.95rem;
+            margin-bottom: 4px;
+        }
+
+        .prereq-card p {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* ---- Footer ---- */
+        .footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .footer a { color: var(--text-secondary); }
+        .footer a:hover { color: var(--text); }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 600px) {
+            .hero { padding: 50px 0 40px; }
+            .hero h1 { font-size: 2rem; }
+            .hero p { font-size: 1.05rem; }
+            .hero-buttons { flex-direction: column; align-items: center; }
+            .step { flex-direction: column; gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="container">
+        <div class="hero-badge">OPEN SOURCE</div>
+        <h1>Claude Webex Bridge</h1>
+        <p>Control Claude Code sessions from Webex Teams. Resume work, start new sessions, and collaborate with AI &mdash; all from your chat client.</p>
+        <div class="hero-buttons">
+            <a href="https://github.com/cxsvs-int/claude-webex-bridge/archive/refs/heads/main.zip" class="btn btn-primary">
+                <svg viewBox="0 0 16 16"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14ZM7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.78a.749.749 0 1 1 1.06-1.06l1.97 1.969Z"/></svg>
+                Download ZIP
+            </a>
+            <a href="https://github.com/cxsvs-int/claude-webex-bridge" class="btn btn-secondary">
+                <svg viewBox="0 0 16 16"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+                View on GitHub
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Features -->
+<section class="features">
+    <div class="container">
+        <h2>Features</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">&#128172;</div>
+                <h3>Chat with Claude Code</h3>
+                <p>Send messages to Claude Code directly from Webex Teams. Get responses with full tool use, code editing, and file access.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128260;</div>
+                <h3>Resume Any Session</h3>
+                <p>Pick up where you left off. Browse recent sessions and reconnect instantly with <code>/resume</code>.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#10024;</div>
+                <h3>Start New Sessions</h3>
+                <p>Create fresh Claude Code sessions in any directory with <code>/new</code>. No terminal needed.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128274;</div>
+                <h3>Secure by Default</h3>
+                <p>Only your authorized email can interact with the bot. Toggle between safe and skip-permissions modes.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#9889;</div>
+                <h3>Real-time Feedback</h3>
+                <p>See "Thinking..." indicators with elapsed time. Cancel long-running commands with <code>/cancel</code>.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128187;</div>
+                <h3>One-Click Setup</h3>
+                <p>A single <code>python3 run.py</code> handles prerequisites, dependencies, configuration, and launch.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Prerequisites -->
+<section class="prereqs">
+    <div class="container">
+        <h2>Prerequisites</h2>
+        <div class="prereq-grid">
+            <div class="prereq-card">
+                <h3>Python 3.9+</h3>
+                <p>Most systems have this pre-installed</p>
+            </div>
+            <div class="prereq-card">
+                <h3>Claude Code CLI</h3>
+                <p><code>npm i -g @anthropic-ai/claude-code</code></p>
+            </div>
+            <div class="prereq-card">
+                <h3>Webex Bot Token</h3>
+                <p>Free at developer.webex.com</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Install -->
+<section class="install">
+    <div class="container">
+        <h2>Get Started in 3 Steps</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h3>Download</h3>
+                    <p>Download and unzip the project.</p>
+                    <div class="code-block">
+                        <span class="cmd">curl -L</span> <span class="comment">https://github.com/cxsvs-int/claude-webex-bridge/archive/main.zip</span> <span class="cmd">-o bridge.zip</span><br>
+                        <span class="cmd">unzip</span> bridge.zip <span class="cmd">&amp;&amp; cd</span> claude-webex-bridge-main
+                    </div>
+                    <p style="margin-top: 8px;">Or <a href="https://github.com/cxsvs-int/claude-webex-bridge/archive/refs/heads/main.zip">click here to download the ZIP</a> and unzip it.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h3>Run the installer</h3>
+                    <p>The script checks prerequisites, sets up a virtual environment, and walks you through configuration.</p>
+                    <div class="code-block">
+                        <span class="cmd">python3</span> run.py
+                    </div>
+                    <p style="margin-top: 8px;">On macOS, you can also double-click <code>Run.command</code> from Finder.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h3>Chat on Webex</h3>
+                    <p>The bot messages you automatically when it starts. Send <code>/sessions</code> to see your Claude Code sessions, or <code>/new</code> to start a fresh one.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Commands -->
+<section class="commands">
+    <div class="container">
+        <h2>Commands</h2>
+        <table class="command-table">
+            <thead>
+                <tr><th>Command</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>/new [dir]</td><td>Start a new session (defaults to home directory)</td></tr>
+                <tr><td>/sessions</td><td>List recent Claude Code sessions</td></tr>
+                <tr><td>/resume N</td><td>Resume session N from the list</td></tr>
+                <tr><td>/resume</td><td>Quick-resume the latest session</td></tr>
+                <tr><td>/disconnect</td><td>Disconnect from the current session</td></tr>
+                <tr><td>/status</td><td>Show connection info and current mode</td></tr>
+                <tr><td>/safe</td><td>Toggle between safe and skip-permissions mode</td></tr>
+                <tr><td>/cancel</td><td>Cancel a running command</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Architecture -->
+<section class="architecture">
+    <div class="container">
+        <h2>How It Works</h2>
+        <p>The bot polls Webex for messages, forwards them to the Claude CLI, and returns responses. No webhooks or public URLs required.</p>
+
+        <div class="arch-diagram">
+            <span class="flow-box flow-accent">Webex Teams</span>
+            <span class="flow-arrow">&larr; poll &rarr;</span>
+            <span class="flow-box flow-green">Bot (bot.py)</span>
+            <span class="flow-arrow">&larr; subprocess &rarr;</span>
+            <span class="flow-box flow-purple">Claude CLI</span>
+        </div>
+
+        <div class="arch-modules">
+            <div class="arch-mod">
+                <h4>bot.py</h4>
+                <p>Polling loop, command dispatch, message relay</p>
+            </div>
+            <div class="arch-mod">
+                <h4>webex_api.py</h4>
+                <p>Async httpx wrapper for Webex REST API</p>
+            </div>
+            <div class="arch-mod">
+                <h4>claude_cli.py</h4>
+                <p>Async wrapper around the Claude CLI subprocess</p>
+            </div>
+            <div class="arch-mod">
+                <h4>sessions.py</h4>
+                <p>Session discovery from Claude Code history files</p>
+            </div>
+            <div class="arch-mod">
+                <h4>auth.py</h4>
+                <p>Email-based authorization check</p>
+            </div>
+            <div class="arch-mod">
+                <h4>config.py</h4>
+                <p>Environment variables and constants</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq">
+    <div class="container">
+        <h2>FAQ</h2>
+        <div class="faq-list">
+            <div class="faq-item">
+                <h3>Do I need a public URL or ngrok?</h3>
+                <p>No. The bot uses polling (every 2.5 seconds), so it works behind firewalls and NATs without any port forwarding.</p>
+            </div>
+            <div class="faq-item">
+                <h3>Is there any latency?</h3>
+                <p>The polling adds ~2.5 seconds, but Claude CLI calls themselves take seconds to minutes, so it's negligible in practice.</p>
+            </div>
+            <div class="faq-item">
+                <h3>Can multiple people use one bot?</h3>
+                <p>Currently the bot only responds to the email in your <code>.env</code> file. Messages from other emails are silently ignored. This is a security feature.</p>
+            </div>
+            <div class="faq-item">
+                <h3>What if the Claude CLI isn't installed?</h3>
+                <p>The setup script will warn you and provide the install command: <code>npm install -g @anthropic-ai/claude-code</code>. You'll need to run <code>claude</code> once to authenticate before using the bot.</p>
+            </div>
+            <div class="faq-item">
+                <h3>What's the difference between safe and skip-permissions mode?</h3>
+                <p><strong>skip-permissions</strong> (default): Claude auto-approves all tool use. Fast but less controlled. <strong>safe</strong>: Claude asks before using tools, but may hang since approval prompts can't be shown in print mode. Toggle with <code>/safe</code>.</p>
+            </div>
+            <div class="faq-item">
+                <h3>Can I run this on Windows?</h3>
+                <p>Yes. The <code>run.py</code> installer works cross-platform. Run <code>python run.py</code> (or <code>python3 run.py</code>) from the project directory.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+    <div class="container">
+        <p>
+            Built by <a href="https://github.com/cxsvs-int">cxsvs-int</a>
+            &middot;
+            <a href="https://github.com/cxsvs-int/claude-webex-bridge">GitHub</a>
+            &middot;
+            <a href="https://github.com/cxsvs-int/claude-webex-bridge/issues">Report an Issue</a>
+        </p>
+    </div>
+</footer>
+
+</body>
+</html>
